@@ -33,18 +33,38 @@ To change the protection later, edit `.github/rulesets/main.json` and update the
 
 ## Publishing to PyPI and npm (off until enabled)
 
-The Publish workflow runs when a GitHub Release is published, but only when the repository variable
-`PUBLISH_ENABLED` is `true`. To turn it on:
+The Publish workflow publishes a GitHub Release to both registries with trusted publishing: each job
+proves it is this repository's `publish.yml` through GitHub's OIDC token and the registry gives it a
+one-time upload credential. No PyPI or npm token is stored anywhere, and npm versions get provenance.
+It runs only when the repository variable `PUBLISH_ENABLED` is `true`, and skips versions already
+published.
 
-1. **PyPI, trusted publishing (no token stored):** on pypi.org, add a pending publisher for project
-   `apify-bot-guard`: owner `tacps126`, repository `apify-bot-guard`, workflow `publish.yml`,
-   environment `pypi`.
-2. **npm:** create an automation token on npmjs.com, add it as the repository secret `NPM_TOKEN`.
-3. In GitHub, Settings, Environments: create `pypi` and `npm`. Optionally add yourself as a required
-   reviewer on each, so every publish waits for your click.
-4. Settings, Secrets and variables, Actions, Variables: add `PUBLISH_ENABLED` = `true`.
+1. **PyPI** (a new project can be trusted before its first upload):
+   - Create an account on pypi.org and turn on two-factor authentication (required).
+   - Account settings, Publishing, Add a new pending publisher, GitHub: PyPI project name
+     `apify-bot-guard`, owner `tacps126`, repository `apify-bot-guard`, workflow `publish.yml`,
+     environment `pypi`. The first run of the workflow creates the project.
+2. **npm, first version by hand** (npm can only trust a workflow for a package that already exists).
+   From a clean checkout of the release tag, signed in with `npm login` (two-factor code when asked):
 
-To publish a release made before publishing was on: Actions, Publish, Run workflow, tag `vX.Y.Z`.
+   ```bash
+   git switch --detach v0.1.0
+   cd js && npm ci && npm publish --access public
+   git switch -
+   ```
+
+3. **npm, trust the workflow** on npmjs.com: the package, Settings, Trusted publishing, GitHub Actions:
+   organization or user `tacps126`, repository `apify-bot-guard`, workflow file `publish.yml`, environment
+   `npm`. Save, then under Publishing access choose "Require two-factor authentication and disallow
+   tokens", so only this workflow (and you, with a code) can publish. The trusted publisher must
+   publish once within 2 days of being added, or it expires: do step 5 soon after.
+4. **GitHub:** Settings, Environments: create `pypi` and `npm` (optionally add yourself as a required
+   reviewer on each, so every publish waits for your click). Settings, Secrets and variables,
+   Actions, Variables: add `PUBLISH_ENABLED` = `true`. No secrets are needed.
+5. **Publish:** merge a pull request that bumps the version (Releasing, above) within 2 days of step
+   3. The Release workflow tags it and starts Publish, which uploads to PyPI and npm. To publish an
+   existing tag again: Actions, Publish, Run workflow, tag `vX.Y.Z` (versions already up are
+   skipped).
 
 ## Housekeeping
 

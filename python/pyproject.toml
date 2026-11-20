@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "apify-bot-guard"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fair free-plan allowances for Apify Actors, with a per-Actor pool against farms of free accounts."
 readme = "README.md"
 license = "MIT"

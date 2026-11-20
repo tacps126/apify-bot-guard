@@ -4,6 +4,13 @@ All notable changes to both packages. Versions follow [Semantic Versioning](http
 
 ## Unreleased
 
+## 0.1.1
+
+- Published to PyPI and npm from GitHub Actions with trusted publishing (no stored tokens), npm
+  versions with provenance.
+- CI: the Python/JavaScript parity check runs on Linux (cases sent on stdin).
+- Dependencies: dev tooling updated.
+
 ## 0.1.0
 
 First release, Python and JavaScript.
