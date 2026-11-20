@@ -1,0 +1,19 @@
+{
+  "name": "apify-free-guard",
+  "version": "0.1.0",
+  "description": "Monthly free-plan allowances for Apify Actors, with a per-Actor pool against farms of free accounts.",
+  "type": "module",
+  "exports": "./src/index.js",
+  "files": ["src"],
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test" },
+  "license": "MIT",
+  "peerDependencies": {
+    "apify": ">=3",
+    "apify-client": ">=2"
+  },
+  "peerDependenciesMeta": {
+    "apify": { "optional": true },
+    "apify-client": { "optional": true }
+  }
+}

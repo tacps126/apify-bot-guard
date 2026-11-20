@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "apify-free-guard"
+version = "0.1.0"
+description = "Monthly free-plan allowances for Apify Actors, with a per-Actor pool against farms of free accounts."
+readme = "../README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+apify = ["apify>=2", "apify-client>=1.8"]
+redis = ["redis>=5"]
+upstash = ["upstash-redis>=1"]
