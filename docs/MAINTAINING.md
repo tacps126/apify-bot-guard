@@ -55,8 +55,12 @@ published.
 
 3. **npm, trust the workflow** on npmjs.com: the package, Settings, Trusted publishing, GitHub Actions:
    organization or user `tacps126`, repository `apify-bot-guard`, workflow file `publish.yml`, environment
-   `npm`. Save, then under Publishing access choose "Require two-factor authentication and disallow
-   tokens", so only this workflow (and you, with a code) can publish. The trusted publisher must
+   `npm`. Allowed actions: `npm stage publish` is always on. Leave "Allow npm publish" unticked
+   (recommended): each release is then staged and goes live only when you approve it on npmjs.com
+   (the package, Staged packages) with your two-factor code. To publish with no approval instead,
+   tick "Allow npm publish" and set the repository variable `NPM_PUBLISH_MODE` = `publish`. "Allow
+   npm dist-tag" is not needed. Set up connection, then under Publishing access choose "Require
+   two-factor authentication and disallow tokens". The trusted publisher must
    publish once within 2 days of being added, or it expires: do step 5 soon after.
 4. **GitHub:** Settings, Environments: create `pypi` and `npm` (optionally add yourself as a required
    reviewer on each, so every publish waits for your click). Settings, Secrets and variables,
