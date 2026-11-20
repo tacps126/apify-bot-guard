@@ -1,17 +1,51 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "apify-free-guard"
+name = "apify-bot-guard"
 version = "0.1.0"
-description = "Monthly free-plan allowances for Apify Actors, with a per-Actor pool against farms of free accounts."
-readme = "../README.md"
+description = "Fair free-plan allowances for Apify Actors, with a per-Actor pool against farms of free accounts."
+readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = []
+keywords = ["apify", "actor", "free-tier", "rate-limit", "abuse", "redis", "upstash"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Typing :: Typed",
+]
 
 [project.optional-dependencies]
 apify = ["apify>=2", "apify-client>=1.8"]
 redis = ["redis>=5"]
 upstash = ["upstash-redis>=1"]
+dev = ["ruff>=0.8", "mypy>=1.13", "coverage>=7.6"]
+
+[project.urls]
+Homepage = "https://github.com/tacps126/apify-bot-guard"
+Issues = "https://github.com/tacps126/apify-bot-guard/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["apify_bot_guard"]
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+files = ["apify_bot_guard"]
+
+[[tool.mypy.overrides]]
+module = ["apify", "apify_client"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+source = ["apify_bot_guard"]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+exclude_also = ["\\.\\.\\.$", "if TYPE_CHECKING:"]

@@ -1,0 +1,10 @@
+line-length = 120
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "BLE", "ASYNC", "PL"]
+ignore = ["PLR0913", "PLR2004", "PLR0911", "PLC0415"]  # PLC0415: optional deps load lazily
+
+
+[lint.isort]
+known-first-party = ["apify_bot_guard", "tests"]

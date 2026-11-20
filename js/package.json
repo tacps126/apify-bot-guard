@@ -1,12 +1,27 @@
 {
-  "name": "apify-free-guard",
+  "name": "apify-bot-guard",
   "version": "0.1.0",
-  "description": "Monthly free-plan allowances for Apify Actors, with a per-Actor pool against farms of free accounts.",
+  "description": "Fair free-plan allowances for Apify Actors, with a per-Actor pool against farms of free accounts.",
   "type": "module",
-  "exports": "./src/index.js",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "types": "./src/index.d.ts",
   "files": ["src"],
-  "engines": { "node": ">=18" },
-  "scripts": { "test": "node --test" },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=95 --test-coverage-branches=90 --test-coverage-functions=95 --test-coverage-exclude=test/**",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check": "npm run lint && npm run typecheck && npm run coverage"
+  },
+  "keywords": ["apify", "actor", "free-tier", "rate-limit", "abuse", "redis", "upstash"],
+  "repository": { "type": "git", "url": "git+https://github.com/tacps126/apify-bot-guard.git", "directory": "js" },
+  "bugs": "https://github.com/tacps126/apify-bot-guard/issues",
   "license": "MIT",
   "peerDependencies": {
     "apify": ">=3",
@@ -15,5 +30,10 @@
   "peerDependenciesMeta": {
     "apify": { "optional": true },
     "apify-client": { "optional": true }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "eslint": "^9.15.0",
+    "typescript": "^5.6.0"
   }
 }

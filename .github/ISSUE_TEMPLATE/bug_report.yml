@@ -1,0 +1,35 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options: [Python, JavaScript, Both]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options: [ApifyKvBackend, RedisBackend (Redis / Valkey), RedisBackend (Upstash), MemoryBackend, Custom]
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include the log lines starting with "bot-guard:". Never paste tokens or user ids.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Smallest code that shows it
+      render: text

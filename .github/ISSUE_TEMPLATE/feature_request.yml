@@ -1,0 +1,21 @@
+name: Feature or backend request
+description: A new limit, backend, language or integration
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: For a backend, say which store and how it can set one entry per run (see docs/DESIGN.md).
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I can open a pull request for this
