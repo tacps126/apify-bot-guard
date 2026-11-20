@@ -2,7 +2,7 @@
 
 | Folder | What it shows |
 |---|---|
-| [python-apify-actor](python-apify-actor) | A Python Actor: one yes/no check at start, cut deliveries, clean exit |
+| [python-apify-actor](python-apify-actor) | A Python Actor: one yes/no check at start, cut deliveries, clean exit; `.actor/actor.json` sets limits as env vars |
 | [js-apify-actor](js-apify-actor) | The same Actor in JavaScript |
 | [js-express-api](js-express-api) | Outside Apify: a free tier on your own HTTP API, with Redis |
 | [python-generic](python-generic) | Outside Apify in Python: any job runner, with Redis or Upstash |
@@ -24,7 +24,9 @@
    { "environmentVariables": { "GUARD_TOKEN": "@guardToken" } }
    ```
 
-4. Optional: set limits as env vars in the same block, for example `"BOT_GUARD_ACTOR_MONTHLY_RESULTS": "200"`.
+4. Optional: set limits and other settings as env vars in the same block, for example
+   `"BOT_GUARD_ACTOR_MONTH_RESULTS": "200"` or `"BOT_GUARD_MODE": "observe"`. Every setting is listed in
+   [docs/CONFIGURATION.md](../docs/CONFIGURATION.md).
 5. Say in your README and input schema what free users get, as Apify asks of every Actor that limits
    free users.
 

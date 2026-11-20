@@ -2,96 +2,140 @@
 import { randomUUID } from 'node:crypto';
 
 import {
-    accountShare, allowanceOf, configFromEnv, entry, isFreePlan, nextDay, nextReset, previousMonth, userHash, utcToday,
+    accountShare, allowanceOf, configFromEnv, entry, hasLimits, makeConfig, needsLastMonth, nextDay, nextReset, planOf,
+    previousMonth, SETTINGS, userHash, utcToday, weekReset,
 } from './core.js';
 
+const WHEN = {
+    day: 'tomorrow (UTC)',
+    pool: "tomorrow (UTC), when more of this month's free share opens",
+    run: 'in a new run',
+};
+export const DEFAULT_MESSAGE = 'Free plan limit reached: {delivered} results this run. More are available {when}, or right away on a paid plan.';
+export const BLOCKED_MESSAGE = 'Free use of this Actor is not available for this account. It works on a paid plan.';
+const UNLIMITED = Object.freeze({ allowed: true, unlimited: true, remaining: null, enforced: true, guard: null });
+
+/** The user id when this run is limited; null when it is not (unknown, exempt, plan not limited). */
+function limitedUser(cfg, env, opts) {
+    const user = String(opts.userId ?? env.APIFY_USER_ID ?? '').trim();
+    if (!user || cfg.exemptUsers.has(user)) return null;
+    let plan = opts.plan;
+    if (plan == null && opts.free != null) plan = opts.free ? 'FREE' : 'PAID';
+    plan = String(plan ?? planOf(env) ?? '').trim().toUpperCase();
+    return opts.force || cfg.plans.includes(plan) ? user : null;
+}
+
 export class BotGuard {
-    constructor({ cfg, backend, allowance, userKey, poolKey, runId, today, log }) {
+    constructor({ cfg, backend, allowance, userKey, poolKey, runId, today, resetsOn = null, log }) {
         this.cfg = cfg;
         this.allowance = allowance;
         this.delivered = 0;
-        this.limited = false;
+        this.limited = false; // a take() was cut (enforce mode)
+        this.over = false; // the run went past its allowance (either mode)
         this.userKey = userKey;
         this.poolKey = poolKey;
         this.runId = runId;
         this.today = today;
+        this.enforced = cfg.mode === 'enforce';
+        this.resetsOnDay = resetsOn;
         this.backend = backend;
         this.log = log;
-        this.booked = false;
-        this.autoPrune = 0;
+        this.booked = allowance.bound === 'blocked';
     }
 
-    /**
-     * open() as one yes/no answer. Keep `decision.guard` (when set): call
-     * take() while delivering and close() at the end.
-     */
+    /** open() as one answer. Keep `decision.guard` (when set): take() while delivering, close() at the end. */
     static async admit(scope, backend, opts = {}) {
         const guard = await BotGuard.open(scope, backend, opts);
-        return guard ? guard.decision : { allowed: true, unlimited: true, remaining: null, guard: null };
+        return guard ? guard.decision : { ...UNLIMITED };
     }
 
     get decision() {
         const left = this.remaining;
         return {
-            allowed: left > 0,
+            allowed: left > 0 || !this.enforced,
             unlimited: false,
-            remaining: left,
+            remaining: this.enforced ? left : null,
             bound: this.allowance.bound,
             message: left > 0 ? null : this.message,
             resetsOn: this.resetsOn,
+            enforced: this.enforced,
             guard: this,
         };
     }
 
-    /** The UTC day more becomes available. */
+    /** The UTC day more becomes available (null when blocked). */
     get resetsOn() {
-        return this.allowance.bound === 'month' ? nextReset(this.today.slice(0, 7)) : nextDay(this.today);
+        const b = this.allowance.bound;
+        if (this.resetsOnDay != null || b === 'blocked') return this.resetsOnDay;
+        if (b === 'month') return nextReset(this.today.slice(0, 7));
+        if (b === 'run') return this.today;
+        return nextDay(this.today);
     }
 
     /**
-     * Load this run's allowance. Resolves to null (no limit) for paying users,
-     * unknown plans, a missing user id, BOT_GUARD=off, and when the backend
-     * cannot be read: a storage problem never blocks a customer.
+     * Load this run's allowance. Resolves to null (no limit) when the user's plan is not in
+     * `plans`, the plan or user id is unknown, the user is exempt, BOT_GUARD=off, no limit is
+     * set, or the backend cannot be read: a storage problem never blocks a customer.
      *
-     * On Apify, userId, free and runId come from the run's env vars. Elsewhere,
-     * pass them yourself. See index.d.ts for every option.
+     * Settings: `opts.config`, else BOT_GUARD_* env vars; any setting given in `opts` (or
+     * `opts.settings`) goes on top, e.g. `{ actorWeekResults: 50 }`.
+     * See docs/CONFIGURATION.md and index.d.ts for every option.
      */
     static async open(scope, backend, opts = {}) {
         const env = opts.env ?? process.env;
         const log = opts.log ?? console;
-        const free = opts.free ?? isFreePlan(env);
-        if (!(opts.force || free)) return null;
-        const cfg = opts.config ?? configFromEnv(scope, env);
-        const user = String(opts.userId ?? env.APIFY_USER_ID ?? '').trim();
-        if (!cfg || !user) return null;
+        const settings = { ...Object.fromEntries(Object.entries(opts).filter(([k]) => SETTINGS.includes(k))), ...opts.settings };
+        let cfg;
+        if (opts.config) {
+            const { scope: s, problems, ...base } = opts.config;
+            cfg = Object.keys(settings).length ? makeConfig(s, { ...base, ...settings }) : opts.config;
+        } else cfg = configFromEnv(scope, env, settings);
+        if (!cfg) return null;
+        for (const p of cfg.problems ?? []) log.warn?.(`bot-guard: ${p}`);
+        const user = limitedUser(cfg, env, opts);
+        if (user === null) return null;
         const today = opts.today ?? utcToday();
-        const h = userHash(user, opts.salt ?? '');
-        const userKey = `user.${today.slice(0, 7)}.${h}`;
-        const poolKey = `pool.${today.slice(0, 7)}.${cfg.scope}`;
-        const runId = String(opts.runId || env.ACTOR_RUN_ID || env.APIFY_ACTOR_RUN_ID || `local-${randomUUID().slice(0, 12)}`);
-        let u;
-        let p;
+        const month = today.slice(0, 7);
+        const h = userHash(user, cfg.salt);
+        const common = {
+            cfg,
+            backend,
+            log,
+            today,
+            userKey: `user.${month}.${h}`,
+            poolKey: `pool.${month}.${cfg.scope}`,
+            runId: String(opts.runId || env.ACTOR_RUN_ID || env.APIFY_ACTOR_RUN_ID || `local-${randomUUID().slice(0, 12)}`),
+        };
+        if (cfg.blockedUsers.has(user)) {
+            log.info?.('bot-guard: user is blocked');
+            return new BotGuard({ ...common, allowance: Object.freeze({ resultsLeft: 0, usdLeft: 0, bound: 'blocked', weekStart: '' }) });
+        }
+        if (!hasLimits(cfg)) return null;
+        const keys = [common.userKey, common.poolKey];
+        if (needsLastMonth(cfg, today)) keys.push(`user.${previousMonth(month)}.${h}`);
+        let ledgers;
         let seen;
         try {
-            [[u, p], seen] = await Promise.all([
-                backend.getLedgers([userKey, poolKey]),
+            [ledgers, seen] = await Promise.all([
+                backend.getLedgers(keys),
                 opts.accountCreated ? null : backend.firstSeen(h, today),
             ]);
         } catch (e) {
-            log.warn?.(`bot-guard: allowance unreadable, no monthly limit this run: ${e?.message ?? e}`);
+            log.warn?.(`bot-guard: allowance unreadable, no limit this run: ${e?.message ?? e}`);
             return null;
         }
-        u.dropStaleHolds(today);
-        p.dropStaleHolds(today);
-        if (seen && opts.trackFrom && seen < opts.trackFrom) seen = null;
+        const [u, p, last = null] = ledgers;
+        for (const l of [u, p, last]) l?.dropStaleHolds(today);
+        if (seen && cfg.trackFrom && seen < cfg.trackFrom) seen = null;
         const share = accountShare(cfg, opts.accountCreated ?? seen, today);
-        const allowance = allowanceOf(cfg, u, p, today, share);
-        const guard = new BotGuard({ cfg, backend, allowance, userKey, poolKey, runId, today, log });
-        guard.autoPrune = opts.autoPrune ?? 0.02;
-        log.info?.(`bot-guard: ${allowance.resultsLeft} results left (bound: ${allowance.bound}, new account: ${share < 1})`);
+        const allowance = allowanceOf(cfg, u, p, today, share, { lastMonth: last });
+        const resetsOn = allowance.bound === 'week' ? weekReset(u, last, allowance.weekStart) : null;
+        const guard = new BotGuard({ ...common, allowance, resetsOn });
+        log.info?.(`bot-guard: ${allowance.resultsLeft} results left (bound: ${allowance.bound}, new account: ${share < 1}, mode: ${cfg.mode})`);
         if (allowance.resultsLeft > 0) {
+            const usd = allowance.usdLeft ?? allowance.resultsLeft * cfg.costPerResult;
             try {
-                await guard.#save(allowance.resultsLeft, allowance.usdLeft, true, { [userKey]: u, [poolKey]: p });
+                await guard.#save(allowance.resultsLeft, usd, true, { [common.userKey]: u, [common.poolKey]: p });
             } catch (e) {
                 log.warn?.(`bot-guard: hold not saved: ${e?.message ?? e}`);
             }
@@ -99,11 +143,20 @@ export class BotGuard {
         return guard;
     }
 
-    /** How many of `wanted` more results may be delivered now; counts them as delivered. */
+    /**
+     * How many of `wanted` more results may be delivered now; counts them as delivered.
+     * In observe mode returns `wanted` and only logs when the run goes past its allowance.
+     */
     take(wanted, costSoFar) {
         let n = Math.max(0, Math.min(wanted, this.remaining));
-        if (costSoFar != null && costSoFar >= this.allowance.usdLeft) n = 0;
-        if (n < wanted) this.limited = true;
+        const usdLeft = this.allowance.usdLeft;
+        if (costSoFar != null && usdLeft != null && costSoFar >= usdLeft) n = 0;
+        if (n < wanted) {
+            if (!this.over) this.log.info?.(`bot-guard: allowance used up (bound: ${this.allowance.bound}, enforced: ${this.enforced})`);
+            this.over = true;
+            if (this.enforced) this.limited = true;
+            else n = wanted;
+        }
         this.delivered += n;
         return n;
     }
@@ -114,10 +167,12 @@ export class BotGuard {
 
     /** A status line for the user when the run was cut or had nothing left. */
     get message() {
-        let when = `on ${nextReset(this.today.slice(0, 7))} (UTC)`;
-        if (this.allowance.bound === 'day') when = 'tomorrow (UTC)';
-        if (this.allowance.bound === 'pool') when = "tomorrow (UTC), when more of this month's free share opens";
-        return `Free plan limit reached: ${this.delivered} results this run. More are available ${when}, or right away on a paid plan.`;
+        const b = this.allowance.bound;
+        const when = WHEN[b] ?? `on ${this.resetsOn} (UTC)`;
+        const values = { delivered: String(this.delivered), when, resets_on: this.resetsOn ?? '', bound: b };
+        let text = this.cfg.message || (b === 'blocked' ? BLOCKED_MESSAGE : DEFAULT_MESSAGE);
+        for (const [k, v] of Object.entries(values)) text = text.replaceAll(`{${k}}`, v);
+        return text;
     }
 
     /** Book what the run delivered, replacing the hold. Safe to call twice. */
@@ -129,7 +184,7 @@ export class BotGuard {
         } catch (e) {
             this.log.warn?.(`bot-guard: run not booked: ${e?.message ?? e}`);
         }
-        if (this.autoPrune > 0 && Math.random() < this.autoPrune) await this.prune();
+        if (this.cfg.autoPrune > 0 && Math.random() < this.cfg.autoPrune) await this.prune();
     }
 
     /** Delete ledgers older than last month. Never throws. */

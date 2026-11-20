@@ -1,6 +1,6 @@
 // A free tier on your own HTTP API, outside Apify. Each request is a "run":
-// free accounts get the usual monthly, daily and pool limits, keyed by your own
-// account ids. Needs REDIS_URL. Try:
+// free accounts get the usual monthly and pool limits plus a daily cap, keyed by
+// your own account ids. Needs REDIS_URL. Try:
 //   curl -H 'x-account: acct-1' -H 'x-plan: free' 'localhost:3000/search?q=shoes&limit=50'
 import express from 'express';
 import Redis from 'ioredis';
@@ -17,7 +17,9 @@ async function search(q, limit) {
 app.get('/search', async (req, res) => {
     const decision = await BotGuard.admit('search-api', backend, {
         userId: req.get('x-account'), // your own account id
-        free: req.get('x-plan') === 'free', // your own plan check
+        plan: req.get('x-plan'), // your own plan name; limited when listed in `plans`
+        plans: ['free'],
+        userDayResults: 200, // any setting; BOT_GUARD_* env vars work too
         runId: req.get('x-request-id'), // optional; a random id otherwise
         log: { warn: console.warn }, // keep info logs quiet per request
     });

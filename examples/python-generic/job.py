@@ -13,7 +13,7 @@ import os
 import sys
 from typing import Any
 
-from apify_bot_guard import BotGuard, Config, RedisBackend
+from apify_bot_guard import BotGuard, RedisBackend
 
 
 def redis_client() -> Any:
@@ -28,15 +28,25 @@ def redis_client() -> Any:
 
 async def run_job(account: str, plan: str, wanted: int) -> None:
     backend = RedisBackend(redis_client())
-    limits = Config(scope="export-job", actor_results=500, pool_results=20_000)
-    decision = await BotGuard.admit("export-job", backend, user_id=account, free=plan == "free", config=limits)
+    # Limits in code here; BOT_GUARD_* env vars work too (code wins). See docs/CONFIGURATION.md.
+    decision = await BotGuard.admit(
+        "export-job",
+        backend,
+        user_id=account,  # required outside Apify
+        plan=plan,  # your plan name; limited when it is in `plans`
+        plans=["free", "trial"],
+        actor_month_results=500,
+        actor_week_results=200,
+        run_results=100,
+        pool_month_results=20_000,
+    )
 
     if not decision.allowed:
         print(f"blocked: {decision.message} (more on {decision.resets_on})")
         return
     guard = decision.guard
     n = guard.take(wanted) if guard else wanted
-    print(f"exporting {n} of {wanted} rows" + ("" if decision.unlimited else f", {guard.remaining} left today"))
+    print(f"exporting {n} of {wanted} rows" + ("" if decision.unlimited else f", {guard.remaining} left this run"))
     if guard:
         await guard.close()
 

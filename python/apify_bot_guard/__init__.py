@@ -2,10 +2,11 @@
 farms of free accounts from draining your data and your budget."""
 
 from .backends import ApifyKvBackend, Backend, MemoryBackend, RedisBackend
-from .core import Allowance, Config, Entry, Ledger, allowance_of, is_free_plan, user_hash
+from .core import DEFAULTS, Allowance, Config, Entry, Ledger, allowance_of, env_name, is_free_plan, plan_of, user_hash
 from .guard import BotGuard, Decision, push_data
 
 __all__ = [
+    "DEFAULTS",
     "Allowance",
     "ApifyKvBackend",
     "Backend",
@@ -17,7 +18,9 @@ __all__ = [
     "MemoryBackend",
     "RedisBackend",
     "allowance_of",
+    "env_name",
     "is_free_plan",
+    "plan_of",
     "push_data",
     "user_hash",
 ]

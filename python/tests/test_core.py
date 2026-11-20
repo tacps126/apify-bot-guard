@@ -26,21 +26,21 @@ class Configs(unittest.TestCase):
         cfg = Config.from_env(
             "a",
             {
-                "BOT_GUARD_ACTOR_MONTHLY_RESULTS": "50",
+                "BOT_GUARD_ACTOR_MONTH_RESULTS": "50",
                 "BOT_GUARD_DAILY_SHARE": "5",
-                "BOT_GUARD_USER_MONTHLY_RESULTS": "-1",
-                "BOT_GUARD_POOL_MONTHLY_RESULTS": "lots",
+                "BOT_GUARD_USER_MONTH_RESULTS": "-1",
+                "BOT_GUARD_POOL_MONTH_RESULTS": "lots",
                 "BOT_GUARD_NEW_ACCOUNT_SHARE": "inf",
                 "BOT_GUARD_COST_PER_RESULT": "0",
                 "BOT_GUARD_SCOPE": "shared",
             },
-            pool_results=10,
+            pool_month_results=10,
         )
         assert cfg is not None
-        self.assertEqual(cfg.actor_results, 50)
+        self.assertEqual(cfg.actor_month_results, 50)
         self.assertEqual(cfg.daily_share, 1.0)
-        self.assertEqual(cfg.user_results, 300)
-        self.assertEqual(cfg.pool_results, 10)
+        self.assertEqual(cfg.user_month_results, 300)
+        self.assertEqual(cfg.pool_month_results, 10)
         self.assertEqual(cfg.new_account_share, 0.25)
         self.assertEqual(cfg.cost_per_result, 1e-7)
         self.assertEqual(cfg.scope, "shared")

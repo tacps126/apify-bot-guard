@@ -1,8 +1,8 @@
 """Delete ledgers older than last month from an Apify key-value store.
 
 Not needed by default: each guarded run tidies the store now and then
-(`auto_prune`, 2% of runs). Run this on a monthly schedule instead if you set
-auto_prune=0, for example as a scheduled Actor or a cron job:
+(`BOT_GUARD_AUTO_PRUNE`, 2% of runs). Run this on a monthly schedule instead if you
+set it to 0, for example as a scheduled Actor or a cron job:
 
     GUARD_TOKEN=... python prune.py
 

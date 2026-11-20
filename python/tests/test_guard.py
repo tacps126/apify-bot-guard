@@ -180,7 +180,7 @@ class Decisions(unittest.TestCase):
         self.assertEqual((blocked.allowed, blocked.remaining), (False, 0))
 
     def test_month_bound_resets_next_month(self):
-        cfg = Config(scope="a", daily_share=1.0, actor_results=10)
+        cfg = Config(scope="a", daily_share=1.0, actor_month_results=10)
         d = run(BotGuard.admit("a", MemoryBackend(), env=FREE, config=cfg, today="2026-12-30", track_from=LATER))
         self.assertEqual((d.bound, d.resets_on), ("month", "2027-01-01"))
 

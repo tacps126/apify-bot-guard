@@ -9,7 +9,7 @@ export default [
             globals: { process: 'readonly', console: 'readonly', structuredClone: 'readonly' },
         },
         rules: {
-            'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+            'no-unused-vars': ['error', { argsIgnorePattern: '^_', ignoreRestSiblings: true }],
             eqeqeq: ['error', 'smart'],
             'prefer-const': 'error',
             'no-var': 'error',

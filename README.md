@@ -18,8 +18,9 @@ It is not tied to Apify: pass the user id, plan and run id yourself and it guard
 - [Python](#python)
 - [JavaScript](#javascript)
 - [Storage backends](#storage-backends)
-- [Limits](#limits)
+- [Settings](#settings)
 - [Cost](#cost)
+- [Full configuration reference](docs/CONFIGURATION.md)
 - [Examples](examples)
 - [Design and storage format](docs/DESIGN.md)
 - [Maintaining and releasing](docs/MAINTAINING.md)
@@ -34,11 +35,16 @@ books what it really delivered, which replaces the hold.
 
 | Limit | What it stops |
 |---|---|
-| Per user per Actor per month (results and your cost) | One account taking more than its share |
-| Per user across all your Actors per month | One account spreading over many Actors |
+| Per user per Actor, per month, week or day (results and your cost) | One account taking more than its share |
+| Per user across all your Actors, per month, week or day | One account spreading over many Actors |
+| Per run (results and cost) | One huge run |
 | Daily share of the monthly allowance | Emptying a month in one burst |
 | Pool per Actor for all free users, released evenly through the month | Farms of many accounts: they can never take more than what has been released so far |
 | Smaller share for new accounts | Fresh farm accounts |
+
+Any mix of these can be on; the tightest wins. You also choose which plans are limited, exempt or
+block user ids, and can run in observe mode first (measure and log, never cut). All of it is set with
+env vars or in code: see [Settings](#settings).
 
 A run that finds nothing left still succeeds, with a status message saying when more is available.
 When storage cannot be read, the run gets no monthly limit and a warning: a storage problem never
@@ -49,7 +55,7 @@ blocks a customer.
 `admit()` gives you a decision to act on:
 
 ```python
-decision = await BotGuard.admit("my-actor", backend)          # or user_id=..., free=... off Apify
+decision = await BotGuard.admit("my-actor", backend)          # or user_id=..., plan=... off Apify
 if not decision.allowed:
     await Actor.set_status_message(decision.message)          # "Free plan limit reached ... more on 2026-12-01"
     return                                                    # succeed, never fail
@@ -58,11 +64,12 @@ guard = decision.guard                                        # None when unlimi
 
 | Field | Meaning |
 |---|---|
-| `allowed` | `true`: deliver. `false`: nothing left this period; end with `message` |
-| `unlimited` | No limit applies (paying user, guard off, or storage unreadable) |
-| `remaining` | Results this run may deliver (`None` / `null` when unlimited) |
-| `bound` | The limit that applies: `month`, `day` or `pool` |
+| `allowed` | `true`: deliver. `false`: nothing left; end with `message` |
+| `unlimited` | No limit applies (plan not limited, exempt user, guard off, or storage unreadable) |
+| `remaining` | Results this run may deliver (`None` / `null` when unlimited or in observe mode) |
+| `bound` | The limit that applies: `month`, `week`, `day`, `run`, `pool` or `blocked` |
 | `message`, `resets_on` / `resetsOn` | What to tell the user, and the UTC day more becomes available |
+| `enforced` | `false` in observe mode: nothing is cut, overruns are only logged |
 | `guard` | Keep it while delivering: `take(n)` before each batch, `close()` at the end |
 
 Everything else happens inside: plan detection, holds against parallel runs, booking, the monthly
@@ -137,12 +144,16 @@ included.
 
 ```js
 const guard = await BotGuard.open('search-api', backend, {
-    userId: account.id,
-    free: account.plan === 'free',
-    runId: request.id,
+    userId: account.id,          // required: no id, no limit
+    plan: account.plan,          // required: your plan name, limited when listed in `plans`
+    plans: ['trial', 'free'],
+    runId: request.id,           // a request or job id; random otherwise
     accountCreated: account.createdAt,
+    userDayResults: 200,         // any setting can be passed here
 });
 ```
+
+Python takes the same as keyword arguments (`user_id=`, `plan=`, `plans=`, `user_day_results=`).
 
 ## Storage backends
 
@@ -164,22 +175,38 @@ prefer.
 Need another store (Postgres, DynamoDB, Cloudflare KV)? A backend is four methods; see
 [docs/DESIGN.md](docs/DESIGN.md#writing-a-backend) and send a pull request.
 
-## Limits
+## Settings
 
-Set with env vars on the Actor, or pass a config in code.
+Every setting can be an env var on the Actor (`BOT_GUARD_*`) or an argument in code; code wins. The
+full list, with how each behaves, is in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
-| Limit | Env var | Default |
+| Setting (env var) | Default | What it does |
 |---|---|---|
-| Results per user per Actor per month | `BOT_GUARD_ACTOR_MONTHLY_RESULTS` | 100 |
-| Your cost per user per Actor per month (USD) | `BOT_GUARD_ACTOR_MONTHLY_USD` | 0.05 |
-| Results per user across all your Actors per month | `BOT_GUARD_USER_MONTHLY_RESULTS` | 300 |
-| Your cost per user across all your Actors per month (USD) | `BOT_GUARD_USER_MONTHLY_USD` | 0.25 |
-| Share of the monthly allowance usable in one day | `BOT_GUARD_DAILY_SHARE` | 0.34 |
-| All free users of one Actor together, per month | `BOT_GUARD_POOL_MONTHLY_RESULTS` | 3000 |
-| New accounts: age in days, and their share of the limits | `BOT_GUARD_NEW_ACCOUNT_DAYS`, `BOT_GUARD_NEW_ACCOUNT_SHARE` | 7, 0.25 |
-| What one result costs you (USD) | `BOT_GUARD_COST_PER_RESULT` | 0.0005 |
-| Book under another name (variants sharing one allowance) | `BOT_GUARD_SCOPE` | the scope you pass |
-| Turn it off | `BOT_GUARD=off` | |
+| `BOT_GUARD_ACTOR_MONTH_RESULTS` / `_USD` | 100 / 0.05 | Per user per Actor, this month |
+| `BOT_GUARD_ACTOR_WEEK_RESULTS` / `_USD` | off | Per user per Actor, last 7 days |
+| `BOT_GUARD_ACTOR_DAY_RESULTS` / `_USD` | off | Per user per Actor, today |
+| `BOT_GUARD_USER_MONTH_RESULTS` / `_USD` | 300 / 0.25 | Per user across your Actors, this month |
+| `BOT_GUARD_USER_WEEK_RESULTS` / `_USD` | off | Per user across your Actors, last 7 days |
+| `BOT_GUARD_USER_DAY_RESULTS` / `_USD` | off | Per user across your Actors, today |
+| `BOT_GUARD_RUN_RESULTS` / `_USD` | off | Per run |
+| `BOT_GUARD_POOL_MONTH_RESULTS` | 3000 | All limited users of one Actor together, this month |
+| `BOT_GUARD_DAILY_SHARE` | 0.34 | Daily cap as a share of the per-Actor monthly results |
+| `BOT_GUARD_NEW_ACCOUNT_DAYS`, `_SHARE` | 7, 0.25 | New accounts get this share of the limits |
+| `BOT_GUARD_TRACK_FROM` | none | First-seen days before this do not count as new |
+| `BOT_GUARD_COST_PER_RESULT` | 0.0005 | Your cost per result (USD), to turn cost limits into results |
+| `BOT_GUARD_PLANS` | `FREE` | Plans that are limited, e.g. `FREE,STARTER` |
+| `BOT_GUARD_EXEMPT_USERS` | none | User ids never limited |
+| `BOT_GUARD_BLOCKED_USERS` | none | User ids refused |
+| `BOT_GUARD_MODE` | `enforce` | `observe`: measure and log, never cut |
+| `BOT_GUARD_MESSAGE` | built in | Your text, with `{delivered}`, `{when}`, `{resets_on}`, `{bound}` |
+| `BOT_GUARD_SALT` | empty | Mixed into the stored user hash |
+| `BOT_GUARD_AUTO_PRUNE` | 0.02 | Chance per run of deleting old ledgers; 0 = off |
+| `BOT_GUARD_SCOPE` | the scope passed | Book under another name, so several Actors share one allowance |
+| `BOT_GUARD` | on | `off` turns the guard off |
+
+A limit set to `none` (env) or `None` / `null` (code) is off. In code the names are `snake_case` in
+Python (`actor_week_results`) and `camelCase` in JavaScript (`actorWeekResults`). Unreadable values are
+ignored with a warning; unknown names in code raise an error.
 
 Plan detection on Apify: `APIFY_USER_PRICING_TIER` when set, else `APIFY_USER_IS_PAYING`. That variable
 is `1` for paying users and set but empty for free ones, so an empty value means free.

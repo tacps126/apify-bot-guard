@@ -33,16 +33,28 @@ Readers accept a bare `{ "<runId>": {...} }` map too, and skip entries they cann
 
 ## Allowance
 
-With `share` = `newAccountShare` for accounts younger than `newAccountDays`, else 1:
+Settings and their defaults are in [CONFIGURATION.md](CONFIGURATION.md). Unset limits (null) are
+skipped. With `share` = `newAccountShare` for accounts younger than `newAccountDays`, else 1, and
+`used(scope, since)` = results and USD of the user's runs of `scope` (all scopes for `user*` limits) on
+or after day `since`:
 
 ```
-usdLeft  = max(0, min(actorUsd*share - user.spentOn(scope), userUsd*share - user.spent()))
-month    = min(actorResults*share - user.resultsOn(scope), userResults*share - user.results(), usdLeft / costPerResult)
-day      = ceil(actorResults*share*dailyShare) - user.resultsOnDay(scope, today)
-poolLeft = ceil(poolResults * dayOfMonth / daysInMonth) - pool.results()
-results  = max(0, floor(min(month, day, poolLeft) + 1e-6))
-bound    = whichever of month, day, pool is smallest; ties keep month, then day
+for window in month, week, day:              # since: "" (whole month), today - 6 days, today
+  for who in actor, user:
+    resultsLeft = <who><Window>Results * share - used.results
+    usdLeft     = max(0, <who><Window>Usd * share - used.usd)    # also kept for the cost guard
+    candidate   = min(resultsLeft, usdLeft / costPerResult)
+  day also: ceil(actorMonthResults * share * dailyShare) - used(scope, today).results
+run      = min(runResults, runUsd / costPerResult)
+pool     = ceil(poolMonthResults * dayOfMonth / daysInMonth) - pool.results()
+results  = max(0, floor(min(month, week, day, run, pool) + 1e-6))
+bound    = the smallest; ties go to the earlier of month, week, day, run, pool
+usdLeft  = min of every usd limit left, and runUsd; null when no usd limit is set
 ```
+
+The week is rolling: today and the 6 days before. On days 1 to 6 of a month, when a weekly limit is
+set, last month's user ledger (`user.<last month>.<hash>`) is read too and merged for the week only.
+The week's reset day is the day the oldest run in the window (with results) leaves it, + 7 days.
 
 Holds from an earlier day are dropped before computing (a run that crashed before booking must not
 block anyone the next day). Holds from today count.
@@ -50,12 +62,17 @@ block anyone the next day). Holds from today count.
 Account age: the creation date when known; else the first-seen day, ignored when earlier than
 `trackFrom` (users who were around before you started tracking are not new).
 
+Before any of this: users in `exemptUsers` and users whose plan is not in `plans` are not limited
+(nothing is read); users in `blockedUsers` get 0 with bound `blocked` (nothing is read or written).
+
 ## Run lifecycle
 
-1. Read both ledgers and, if needed, first-seen. Any read error: no guard (fail open).
+1. Read both ledgers (plus last month's user ledger for a rolling week) and, if needed, first-seen.
+   Any read error: no guard (fail open).
 2. If anything is left, write a hold of `results` (and `usdLeft`) to both ledgers under the run id.
    Backends that merge whole records may merge into the ledgers just read instead of re-reading.
-3. `take(n)` returns `min(n, remaining)`, or 0 once the caller's measured cost reaches `usdLeft`.
+3. `take(n)` returns `min(n, remaining)`, or 0 once the caller's measured cost reaches `usdLeft`. In
+   observe mode it returns `n` and only records that the run went over.
 4. `close()` writes the delivered amount under the same run id, replacing the hold. Re-read before
    merging. Errors are logged, never raised. With chance `auto_prune` it then prunes ledgers older
    than last month (this month and last are kept, so holds and late bookings are never lost).

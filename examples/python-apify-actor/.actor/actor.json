@@ -1,0 +1,14 @@
+{
+  "actorSpecification": 1,
+  "name": "my-actor",
+  "version": "0.1",
+  "environmentVariables": {
+    "GUARD_TOKEN": "@guardToken",
+    "BOT_GUARD_ACTOR_MONTH_RESULTS": "200",
+    "BOT_GUARD_ACTOR_WEEK_RESULTS": "80",
+    "BOT_GUARD_RUN_RESULTS": "50",
+    "BOT_GUARD_USER_MONTH_USD": "0.30",
+    "BOT_GUARD_EXEMPT_USERS": "your-own-user-id",
+    "BOT_GUARD_MODE": "observe"
+  }
+}

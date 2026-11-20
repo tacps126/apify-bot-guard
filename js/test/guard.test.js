@@ -161,7 +161,7 @@ test('admit gives one answer', async () => {
     assert.match(d.guard.decision.message, /Free plan limit reached/);
     const blocked = await BotGuard.admit('a', b, { ...opts, env: { ...FREE, ACTOR_RUN_ID: 'r2' } });
     assert.deepEqual([blocked.allowed, blocked.remaining], [false, 0]);
-    const month = await open(new MemoryBackend(), FREE, { config: makeConfig('a', { dailyShare: 1, actorResults: 10 }), today: '2026-12-30' });
+    const month = await open(new MemoryBackend(), FREE, { config: makeConfig('a', { dailyShare: 1, actorMonthResults: 10 }), today: '2026-12-30' });
     assert.deepEqual([month.decision.bound, month.resetsOn], ['month', '2027-01-01']);
 });
 

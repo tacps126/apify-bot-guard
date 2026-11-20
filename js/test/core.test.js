@@ -22,18 +22,18 @@ test('plan detection', () => {
 test('config from env: off switch, values, overrides, clamps', () => {
     for (const v of ['off', '0', 'false', ' OFF ']) assert.equal(configFromEnv('a', { BOT_GUARD: v }), null);
     const cfg = configFromEnv('a', {
-        BOT_GUARD_ACTOR_MONTHLY_RESULTS: '50',
+        BOT_GUARD_ACTOR_MONTH_RESULTS: '50',
         BOT_GUARD_DAILY_SHARE: '5',
-        BOT_GUARD_USER_MONTHLY_RESULTS: '-1',
-        BOT_GUARD_POOL_MONTHLY_RESULTS: 'lots',
+        BOT_GUARD_USER_MONTH_RESULTS: '-1',
+        BOT_GUARD_POOL_MONTH_RESULTS: 'lots',
         BOT_GUARD_NEW_ACCOUNT_SHARE: 'Infinity',
         BOT_GUARD_COST_PER_RESULT: '0',
         BOT_GUARD_SCOPE: 'shared',
-    }, { poolResults: 10, userUsd: null });
-    assert.equal(cfg.actorResults, 50);
+    }, { poolMonthResults: 10, userMonthUsd: null });
+    assert.equal(cfg.actorMonthResults, 50);
     assert.equal(cfg.dailyShare, 1);
-    assert.equal(cfg.userResults, 300);
-    assert.equal(cfg.poolResults, 10);
+    assert.equal(cfg.userMonthResults, 300);
+    assert.equal(cfg.poolMonthResults, 10);
     assert.equal(cfg.newAccountShare, 0.25);
     assert.equal(cfg.costPerResult, 1e-7);
     assert.equal(cfg.scope, 'shared');
