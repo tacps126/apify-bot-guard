@@ -69,7 +69,9 @@ def python_side(cs: list[dict[str, object]]) -> list[list[object]]:
 JS = """
 import { Ledger, allowanceOf, makeConfig, userHash } from './js/src/index.js';
 import { weekReset } from './js/src/core.js';
-const cs = JSON.parse(process.argv[1]);
+import { readFileSync } from 'node:fs';
+// Cases come on stdin: as an argument they pass Linux's per-argument size limit.
+const cs = JSON.parse(readFileSync(0, 'utf8'));
 const out = cs.map((c) => {
   const cfg = makeConfig('s', c.cfg);
   const [user, pool, last] = [c.user, c.pool, c.last].map((r) => Ledger.fromRaw(r));
@@ -86,7 +88,8 @@ def main() -> int:
     cs = cases()
     js_cases = [dict(c, cfg={camel(k): v for k, v in c["cfg"].items()}) for c in cs]  # type: ignore[union-attr]
     js = subprocess.run(
-        ["node", "--input-type=module", "-e", JS, json.dumps(js_cases)],
+        ["node", "--input-type=module", "-e", JS],
+        input=json.dumps(js_cases),
         cwd=ROOT,
         capture_output=True,
         text=True,
