@@ -22,4 +22,5 @@ First release, Python and JavaScript.
 - `admit()`: one decision (allowed, remaining, bound, message, resets on, enforced) to act on.
 - Old ledgers cleaned up: Redis by expiry, key-value stores by `prune()` on 2% of runs.
 - `push_data` / `pushData` helpers for the Apify SDK.
+- AI-ready docs: docs/AI-INTEGRATION.md (one page for assistants, with prompts), llms.txt, AGENTS.md.
 - Examples: Python and JavaScript Actors, a free tier on an HTTP API, a generic job runner, cleanup.

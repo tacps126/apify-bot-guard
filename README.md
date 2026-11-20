@@ -22,6 +22,7 @@ It is not tied to Apify: pass the user id, plan and run id yourself and it guard
 - [Cost](#cost)
 - [Full configuration reference](docs/CONFIGURATION.md)
 - [Examples](examples)
+- [Using an AI assistant](docs/AI-INTEGRATION.md) (also [llms.txt](llms.txt))
 - [Design and storage format](docs/DESIGN.md)
 - [Maintaining and releasing](docs/MAINTAINING.md)
 - [Contributing](CONTRIBUTING.md)
@@ -154,6 +155,13 @@ const guard = await BotGuard.open('search-api', backend, {
 ```
 
 Python takes the same as keyword arguments (`user_id=`, `plan=`, `plans=`, `user_day_results=`).
+
+## With an AI assistant
+
+[docs/AI-INTEGRATION.md](docs/AI-INTEGRATION.md) is a single page an assistant (Claude, ChatGPT,
+Copilot, Cursor) can follow to add the guard to your project: what to ask, the code for each setup,
+settings recipes, a checklist and mistakes to avoid, plus prompts to paste. [llms.txt](llms.txt)
+indexes the docs for tools that read it. Agents changing this repository read [AGENTS.md](AGENTS.md).
 
 ## Storage backends
 

@@ -16,3 +16,6 @@ await guard?.close();
 ```
 
 Full documentation: https://github.com/tacps126/apify-bot-guard
+
+Using an AI assistant? Point it at
+https://github.com/tacps126/apify-bot-guard/blob/main/docs/AI-INTEGRATION.md

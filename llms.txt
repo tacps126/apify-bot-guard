@@ -1,0 +1,25 @@
+# apify-bot-guard
+
+> Fair free-plan allowances for Apify Actors (or any free tier), in Python and JavaScript, with no runtime dependencies. At run start `admit()` returns one decision (allowed, remaining, message); the run delivers up to `remaining` and calls `close()`. Limits per user per Actor, per user across Actors, per run, and a pool per Actor, by month, rolling week or day, in results or in cost. Paying users are never limited. Every setting is a `BOT_GUARD_*` env var or a code argument.
+
+Packages: `pip install "apify-bot-guard[apify]"` (Python 3.10+, import `apify_bot_guard`), `npm install apify-bot-guard` (Node 20+, ESM, types included).
+
+## Docs
+
+- [AI integration guide](https://github.com/tacps126/apify-bot-guard/blob/main/docs/AI-INTEGRATION.md): step-by-step for an AI assistant adding the guard to a project, with copy-paste code and checks
+- [README](https://github.com/tacps126/apify-bot-guard/blob/main/README.md): overview, decision fields, install, backends, settings summary, cost
+- [Configuration reference](https://github.com/tacps126/apify-bot-guard/blob/main/docs/CONFIGURATION.md): every setting, env var name, default, who is limited, identity fields, failure behaviour, recipes
+- [Design](https://github.com/tacps126/apify-bot-guard/blob/main/docs/DESIGN.md): allowance formula, storage format, writing a backend
+
+## Examples
+
+- [Python Apify Actor](https://github.com/tacps126/apify-bot-guard/tree/main/examples/python-apify-actor)
+- [JavaScript Apify Actor](https://github.com/tacps126/apify-bot-guard/tree/main/examples/js-apify-actor)
+- [Free tier on an HTTP API (Express)](https://github.com/tacps126/apify-bot-guard/tree/main/examples/js-express-api)
+- [Generic job runner (Python, no Apify)](https://github.com/tacps126/apify-bot-guard/tree/main/examples/python-generic)
+- [Scheduled cleanup](https://github.com/tacps126/apify-bot-guard/tree/main/examples/cleanup)
+
+## Optional
+
+- [Changelog](https://github.com/tacps126/apify-bot-guard/blob/main/CHANGELOG.md)
+- [Contributing](https://github.com/tacps126/apify-bot-guard/blob/main/CONTRIBUTING.md)
