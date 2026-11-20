@@ -57,17 +57,19 @@ Account age: the creation date when known; else the first-seen day, ignored when
    Backends that merge whole records may merge into the ledgers just read instead of re-reading.
 3. `take(n)` returns `min(n, remaining)`, or 0 once the caller's measured cost reaches `usdLeft`.
 4. `close()` writes the delivered amount under the same run id, replacing the hold. Re-read before
-   merging. Errors are logged, never raised.
+   merging. Errors are logged, never raised. With chance `auto_prune` it then prunes ledgers older
+   than last month (this month and last are kept, so holds and late bookings are never lost).
 
 ## Writing a backend
 
-Three async methods:
+Four async methods:
 
 | Python | JavaScript | Contract |
 |---|---|---|
 | `get_ledgers(keys)` | `getLedgers(keys)` | Ledgers in key order; empty for missing keys; one round trip if the store allows |
 | `put_entries(puts, known)` | `putEntries(puts, known)` | Set entry `(key, runId)`; keep other runs' entries; expire after about 45 days |
 | `first_seen(hash, today)` | `firstSeen(hash, today)` | Return the stored day, storing `today` if none (set-if-absent) |
+| `prune(before_month)` | `prune(beforeMonth)` | Delete `user.*` and `pool.*` ledgers of months before `before_month`; return how many. Stores with expiry may return 0 |
 
 Stores with per-field writes (Redis hashes, SQL rows keyed by `(key, run_id)`, DynamoDB items) give
 exact counts. Stores that only replace whole values (key-value stores) must read, merge and write;

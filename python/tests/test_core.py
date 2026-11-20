@@ -1,7 +1,7 @@
 import unittest
 
 from apify_bot_guard import Config, Entry, Ledger, allowance_of, is_free_plan, user_hash
-from apify_bot_guard.core import account_share, day_of_month, next_reset
+from apify_bot_guard.core import account_share, day_of_month, ledger_month, next_day, next_reset, previous_month
 
 # Pinned in both packages: Python and JavaScript Actors can share one store.
 HASH_U1 = "c7e697d2100b975d4301c43545656d09"
@@ -20,19 +20,19 @@ class Plan(unittest.TestCase):
 class Configs(unittest.TestCase):
     def test_off_switch(self):
         for v in ("off", "0", "false", " OFF "):
-            self.assertIsNone(Config.from_env("a", {"FREE_BUDGET": v}))
+            self.assertIsNone(Config.from_env("a", {"BOT_GUARD": v}))
 
     def test_env_values_overrides_and_clamps(self):
         cfg = Config.from_env(
             "a",
             {
-                "FREE_ACTOR_MONTHLY_RESULTS": "50",
-                "FREE_DAILY_SHARE": "5",
-                "FREE_USER_MONTHLY_RESULTS": "-1",
-                "FREE_POOL_MONTHLY_RESULTS": "lots",
-                "FREE_NEW_ACCOUNT_SHARE": "inf",
-                "FREE_COST_PER_RESULT": "0",
-                "FREE_BUDGET_SCOPE": "shared",
+                "BOT_GUARD_ACTOR_MONTHLY_RESULTS": "50",
+                "BOT_GUARD_DAILY_SHARE": "5",
+                "BOT_GUARD_USER_MONTHLY_RESULTS": "-1",
+                "BOT_GUARD_POOL_MONTHLY_RESULTS": "lots",
+                "BOT_GUARD_NEW_ACCOUNT_SHARE": "inf",
+                "BOT_GUARD_COST_PER_RESULT": "0",
+                "BOT_GUARD_SCOPE": "shared",
             },
             pool_results=10,
         )
@@ -105,6 +105,15 @@ class Dates(unittest.TestCase):
         self.assertEqual(account_share(cfg, "garbage", "2026-11-20"), 1.0)
         self.assertEqual(account_share(cfg, "2026-11-14", "2026-11-20"), 0.25)
         self.assertEqual(account_share(cfg, "2026-11-13T23:00:00Z", "2026-11-20"), 1.0)
+
+    def test_month_keys(self):
+        self.assertEqual(previous_month("2026-01"), "2025-12")
+        self.assertEqual(previous_month("2026-11"), "2026-10")
+        self.assertEqual(next_day("2026-12-31"), "2027-01-01")
+        self.assertEqual(ledger_month("user.2026-11.abc"), "2026-11")
+        self.assertEqual(ledger_month("pool.2026-11.my.actor"), "2026-11")
+        self.assertIsNone(ledger_month("seen.abc"))
+        self.assertIsNone(ledger_month("user.later.abc"))
 
     def test_hash_is_stable_and_salted(self):
         self.assertEqual(user_hash("u1"), HASH_U1)

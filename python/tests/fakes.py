@@ -22,6 +22,23 @@ class FakeKv:
         self.owner.calls += 1
         self.records[key] = copy.deepcopy(value)
 
+    async def list_keys(self, limit: int = 1000, exclusive_start_key: str | None = None) -> dict[str, Any]:
+        self.owner.calls += 1
+        keys = sorted(self.records)
+        if exclusive_start_key is not None:
+            keys = [k for k in keys if k > exclusive_start_key]
+        page = keys[:limit]
+        more = len(keys) > limit
+        return {
+            "items": [{"key": k} for k in page],
+            "isTruncated": more,
+            "nextExclusiveStartKey": page[-1] if more else None,
+        }
+
+    async def delete_record(self, key: str) -> None:
+        self.owner.calls += 1
+        self.records.pop(key, None)
+
 
 class FakeStores:
     def __init__(self, owner: FakeApifyClient) -> None:

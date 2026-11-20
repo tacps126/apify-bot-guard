@@ -1,0 +1,2 @@
+apify>=2
+apify-bot-guard[apify]

@@ -14,15 +14,15 @@ export const DEFAULTS = Object.freeze({
 });
 
 export const ENV_NAMES = Object.freeze({
-    actorResults: 'FREE_ACTOR_MONTHLY_RESULTS',
-    actorUsd: 'FREE_ACTOR_MONTHLY_USD',
-    userResults: 'FREE_USER_MONTHLY_RESULTS',
-    userUsd: 'FREE_USER_MONTHLY_USD',
-    dailyShare: 'FREE_DAILY_SHARE',
-    poolResults: 'FREE_POOL_MONTHLY_RESULTS',
-    newAccountDays: 'FREE_NEW_ACCOUNT_DAYS',
-    newAccountShare: 'FREE_NEW_ACCOUNT_SHARE',
-    costPerResult: 'FREE_COST_PER_RESULT',
+    actorResults: 'BOT_GUARD_ACTOR_MONTHLY_RESULTS',
+    actorUsd: 'BOT_GUARD_ACTOR_MONTHLY_USD',
+    userResults: 'BOT_GUARD_USER_MONTHLY_RESULTS',
+    userUsd: 'BOT_GUARD_USER_MONTHLY_USD',
+    dailyShare: 'BOT_GUARD_DAILY_SHARE',
+    poolResults: 'BOT_GUARD_POOL_MONTHLY_RESULTS',
+    newAccountDays: 'BOT_GUARD_NEW_ACCOUNT_DAYS',
+    newAccountShare: 'BOT_GUARD_NEW_ACCOUNT_SHARE',
+    costPerResult: 'BOT_GUARD_COST_PER_RESULT',
 });
 
 /** Limits with defaults filled in and values clamped. */
@@ -34,9 +34,9 @@ export function makeConfig(scope, values = {}) {
     return cfg;
 }
 
-/** Limits from env vars (see ENV_NAMES), then `overrides`. `null` when FREE_BUDGET is off, 0 or false. */
+/** Limits from env vars (see ENV_NAMES), then `overrides`. `null` when BOT_GUARD is off, 0 or false. */
 export function configFromEnv(scope, env = process.env, overrides = {}) {
-    if (['off', '0', 'false'].includes(String(env.FREE_BUDGET ?? '').trim().toLowerCase())) return null;
+    if (['off', '0', 'false'].includes(String(env.BOT_GUARD ?? '').trim().toLowerCase())) return null;
     const values = {};
     for (const [k, name] of Object.entries(ENV_NAMES)) {
         const raw = String(env[name] ?? '').trim();
@@ -44,7 +44,7 @@ export function configFromEnv(scope, env = process.env, overrides = {}) {
         if (Number.isFinite(v) && v >= 0) values[k] = v;
     }
     for (const [k, v] of Object.entries(overrides)) if (v != null) values[k] = Number(v);
-    return makeConfig(env.FREE_BUDGET_SCOPE || scope, values);
+    return makeConfig(env.BOT_GUARD_SCOPE || scope, values);
 }
 
 /**
@@ -156,4 +156,22 @@ export function nextReset(month) {
         m = 1;
     } else m += 1;
     return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-01`;
+}
+
+export function nextDay(today) {
+    return new Date(dayMs(today) + 86_400_000).toISOString().slice(0, 10);
+}
+
+export function previousMonth(month) {
+    let [y, m] = month.split('-').map(Number);
+    if (m <= 1) {
+        y -= 1;
+        m = 12;
+    } else m -= 1;
+    return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}`;
+}
+
+/** `2026-11` for a ledger key like `user.2026-11.<hash>`; null for other keys. */
+export function ledgerMonth(key) {
+    return /^(?:user|pool)\.(\d{4}-\d{2})\./.exec(key)?.[1] ?? null;
 }

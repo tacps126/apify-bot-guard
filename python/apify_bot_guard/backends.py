@@ -12,7 +12,7 @@ import json
 from collections.abc import Sequence
 from typing import Any, Protocol
 
-from .core import Entry, Ledger
+from .core import Entry, Ledger, ledger_month
 
 LEDGER_TTL_SECONDS = 45 * 24 * 3600  # a month plus slack
 SEEN_TTL_SECONDS = 400 * 24 * 3600
@@ -34,6 +34,10 @@ class Backend(Protocol):
         """The stored first-seen day for a user, recording `today` if none."""
         ...
 
+    async def prune(self, before_month: str) -> int:
+        """Delete ledgers of months before `before_month` (YYYY-MM); return how many."""
+        ...
+
 
 class MemoryBackend:
     """In-process store for tests and local runs."""
@@ -50,6 +54,12 @@ class MemoryBackend:
 
     async def first_seen(self, user_key: str, today: str) -> str | None:
         return str(self.data.setdefault(f"seen.{user_key}", today))
+
+    async def prune(self, before_month: str) -> int:
+        old = [k for k in self.data if (ledger_month(k) or "9999") < before_month]
+        for k in old:
+            del self.data[k]
+        return len(old)
 
 
 def record_key(key: str) -> str:
@@ -125,6 +135,22 @@ class ApifyKvBackend:
         await (await self._kv()).set_record(record_key(key), {"first": today})
         return today
 
+    async def prune(self, before_month: str) -> int:
+        """Key-value records never expire on their own, so old months are deleted
+        here: every key is listed (one call per 1,000 keys), old ledgers removed."""
+        kv = await self._kv()
+        old: list[str] = []
+        start: str | None = None
+        while True:
+            page = await kv.list_keys(limit=1000, exclusive_start_key=start)
+            old += [i["key"] for i in page.get("items", []) if (ledger_month(i["key"]) or "9999") < before_month]
+            start = page.get("nextExclusiveStartKey")
+            if not page.get("isTruncated") or not start:
+                break
+        for i in range(0, len(old), 20):
+            await asyncio.gather(*(kv.delete_record(k) for k in old[i : i + 20]))
+        return len(old)
+
 
 def _text(v: Any) -> Any:
     return v.decode() if isinstance(v, bytes) else v
@@ -185,6 +211,10 @@ class RedisBackend:
         await self._r.set(k, today, nx=True, ex=SEEN_TTL_SECONDS)
         got = _text(await self._r.get(k))
         return str(got) if got else None
+
+    async def prune(self, before_month: str) -> int:
+        """Nothing to do: every ledger expires on its own (LEDGER_TTL_SECONDS)."""
+        return 0
 
 
 def _supports_pipeline(client: Any) -> bool:

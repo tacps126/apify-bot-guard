@@ -83,7 +83,7 @@ class Guard(unittest.TestCase):
         b = MemoryBackend()
         self.assertIsNone(run(BotGuard.open("a", b, env=dict(FREE, APIFY_USER_IS_PAYING="1"))))
         self.assertIsNone(run(BotGuard.open("a", b, env={"APIFY_USER_ID": "u1"})))
-        self.assertIsNone(run(BotGuard.open("a", b, env=dict(FREE, FREE_BUDGET="off"))))
+        self.assertIsNone(run(BotGuard.open("a", b, env=dict(FREE, BOT_GUARD="off"))))
         self.assertIsNone(run(BotGuard.open("a", b, env=dict(FREE, APIFY_USER_ID=""))))
         self.assertEqual(b.data, {})
 
@@ -159,6 +159,73 @@ class RoundTrips(unittest.TestCase):
     def test_record_keys_are_valid(self):
         self.assertEqual(record_key("user.2026-11.ab/cd é"), "user.2026-11.ab_cd__")
         self.assertEqual(len(record_key("x" * 300)), 256)
+
+
+class Decisions(unittest.TestCase):
+    def test_admit_gives_one_answer(self):
+        b = MemoryBackend()
+        paying = run(BotGuard.admit("a", b, env=dict(FREE, APIFY_USER_IS_PAYING="1")))
+        self.assertEqual((paying.allowed, paying.unlimited, paying.guard), (True, True, None))
+        d = run(BotGuard.admit("a", b, env=FREE, today="2026-11-20", track_from=LATER))
+        self.assertEqual(
+            (d.allowed, d.unlimited, d.remaining, d.bound, d.resets_on), (True, False, 34, "day", "2026-11-21")
+        )
+        assert d.guard
+        d.guard.take(34)
+        run(d.guard.close())
+        after = d.guard.decision
+        self.assertFalse(after.allowed)
+        self.assertIn("Free plan limit reached", after.message or "")
+        blocked = run(BotGuard.admit("a", b, env=dict(FREE, ACTOR_RUN_ID="r2"), today="2026-11-20", track_from=LATER))
+        self.assertEqual((blocked.allowed, blocked.remaining), (False, 0))
+
+    def test_month_bound_resets_next_month(self):
+        cfg = Config(scope="a", daily_share=1.0, actor_results=10)
+        d = run(BotGuard.admit("a", MemoryBackend(), env=FREE, config=cfg, today="2026-12-30", track_from=LATER))
+        self.assertEqual((d.bound, d.resets_on), ("month", "2027-01-01"))
+
+
+class Prune(unittest.TestCase):
+    def seed(self, b: Any) -> None:
+        for month in ("2026-08", "2026-09", "2026-10", "2026-11"):
+            g = run(BotGuard.open("a", b, env=FREE, today=f"{month}-15", track_from=LATER, auto_prune=0))
+            assert g
+            run(g.close())
+
+    def test_prune_keeps_this_and_last_month(self):
+        for name, b in (("memory", MemoryBackend()), ("apify", ApifyKvBackend(client=FakeApifyClient()))):
+            with self.subTest(name):
+                self.seed(b)
+                g = run(BotGuard.open("a", b, env=FREE, today="2026-11-20", track_from=LATER, auto_prune=0))
+                assert g
+                self.assertEqual(run(g.prune()), 4)  # user + pool for August and September
+                self.assertEqual(run(g.prune()), 0)
+
+    def test_apify_prune_pages_through_keys(self):
+        c = FakeApifyClient()
+        for i in range(2500):
+            c.kv.records[f"user.2026-01.{i:05d}"] = {}
+        c.kv.records["seen.x"] = {"first": "2026-01-01"}
+        self.assertEqual(run(ApifyKvBackend(client=c).prune("2026-10")), 2500)
+        self.assertEqual(list(c.kv.records), ["seen.x"])
+
+    def test_redis_relies_on_ttl_and_auto_prune_runs_on_close(self):
+        self.assertEqual(run(RedisBackend(FakeRedis()).prune("2026-10")), 0)
+        b = MemoryBackend()
+        self.seed(b)
+        g = run(BotGuard.open("a", b, env=FREE, today="2026-11-20", track_from=LATER, auto_prune=1.0))
+        assert g
+        run(g.close())
+        self.assertFalse(any("2026-08" in k for k in b.data))
+
+    def test_prune_failure_is_logged_not_raised(self):
+        class Broken(MemoryBackend):
+            async def prune(self, before_month: str) -> int:
+                raise RuntimeError("no list permission")
+
+        g = run(BotGuard.open("a", Broken(), env=FREE, today="2026-11-20", track_from=LATER))
+        assert g
+        self.assertEqual(run(g.prune()), 0)
 
 
 class PushData(unittest.TestCase):

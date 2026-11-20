@@ -2,7 +2,7 @@
 // Every backend works in batches, so a run costs a fixed, small number of
 // round trips: one batch read at start, one batch write for the hold, one at
 // the end.
-import { Ledger } from './core.js';
+import { Ledger, ledgerMonth } from './core.js';
 
 export const LEDGER_TTL_SECONDS = 45 * 24 * 3600; // a month plus slack
 export const SEEN_TTL_SECONDS = 400 * 24 * 3600;
@@ -28,6 +28,12 @@ export class MemoryBackend {
         const k = `seen.${userKey}`;
         if (!this.data.has(k)) this.data.set(k, today);
         return this.data.get(k);
+    }
+
+    async prune(beforeMonth) {
+        const old = [...this.data.keys()].filter((k) => (ledgerMonth(k) ?? '9999') < beforeMonth);
+        for (const k of old) this.data.delete(k);
+        return old.length;
     }
 }
 
@@ -97,6 +103,24 @@ export class ApifyKvBackend {
         await (await this.#kv()).setRecord({ key: recordKey(k), value: { first: today } });
         return today;
     }
+
+    /**
+     * Key-value records never expire on their own, so old months are deleted
+     * here: every key is listed (one call per 1,000 keys), old ledgers removed.
+     */
+    async prune(beforeMonth) {
+        const kv = await this.#kv();
+        const old = [];
+        let exclusiveStartKey;
+        for (;;) {
+            const page = await kv.listKeys({ limit: 1000, exclusiveStartKey });
+            for (const { key } of page.items ?? []) if ((ledgerMonth(key) ?? '9999') < beforeMonth) old.push(key);
+            exclusiveStartKey = page.nextExclusiveStartKey;
+            if (!page.isTruncated || !exclusiveStartKey) break;
+        }
+        for (let i = 0; i < old.length; i += 20) await Promise.all(old.slice(i, i + 20).map((k) => kv.deleteRecord(k)));
+        return old.length;
+    }
 }
 
 /**
@@ -163,5 +187,10 @@ export class RedisBackend {
         else if (this.flavor === 'ioredis') await this.r.set(k, today, 'EX', SEEN_TTL_SECONDS, 'NX');
         else await this.r.set(k, today, { nx: true, ex: SEEN_TTL_SECONDS });
         return this.r.get(k);
+    }
+
+    /** Nothing to do: every ledger expires on its own (LEDGER_TTL_SECONDS). */
+    async prune() {
+        return 0;
     }
 }

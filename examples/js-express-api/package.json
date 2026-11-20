@@ -1,0 +1,11 @@
+{
+  "name": "bot-guard-example-api",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "dependencies": {
+    "apify-bot-guard": "^0.1.0",
+    "express": "^4.21.0",
+    "ioredis": "^5.4.0"
+  }
+}

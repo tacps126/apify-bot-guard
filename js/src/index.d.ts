@@ -60,6 +60,8 @@ export interface Backend {
     /** `known`: ledgers just read, for backends that must merge instead of setting one field. */
     putEntries(puts: Put[], known?: Record<string, Ledger>): Promise<void>;
     firstSeen(userKey: string, today: string): Promise<string | null>;
+    /** Delete ledgers of months before `beforeMonth` (YYYY-MM); resolve to how many. */
+    prune(beforeMonth: string): Promise<number>;
 }
 
 export declare class MemoryBackend implements Backend {
@@ -67,6 +69,7 @@ export declare class MemoryBackend implements Backend {
     getLedgers(keys: string[]): Promise<Ledger[]>;
     putEntries(puts: Put[]): Promise<void>;
     firstSeen(userKey: string, today: string): Promise<string | null>;
+    prune(beforeMonth: string): Promise<number>;
 }
 
 export declare class ApifyKvBackend implements Backend {
@@ -74,6 +77,7 @@ export declare class ApifyKvBackend implements Backend {
     getLedgers(keys: string[]): Promise<Ledger[]>;
     putEntries(puts: Put[], known?: Record<string, Ledger>): Promise<void>;
     firstSeen(userKey: string, today: string): Promise<string | null>;
+    prune(beforeMonth: string): Promise<number>;
 }
 
 export declare class RedisBackend implements Backend {
@@ -82,6 +86,7 @@ export declare class RedisBackend implements Backend {
     getLedgers(keys: string[]): Promise<Ledger[]>;
     putEntries(puts: Put[]): Promise<void>;
     firstSeen(userKey: string, today: string): Promise<string | null>;
+    prune(beforeMonth: string): Promise<number>;
 }
 
 export interface OpenOptions {
@@ -105,11 +110,34 @@ export interface OpenOptions {
     force?: boolean;
     /** Mixed into the user hash. */
     salt?: string;
+    /** Chance (0 to 1) that close() also deletes ledgers older than last month. Default 0.02; 0 = off. */
+    autoPrune?: number;
     log?: { info?(m: string): void; warn?(m: string): void };
+}
+
+export interface Decision {
+    /** Deliver results. false: nothing left; end the run with `message`. */
+    allowed: boolean;
+    /** No limit applies (paying user, guard off, storage unreadable). */
+    unlimited: boolean;
+    /** Results this run may deliver; null when unlimited. */
+    remaining: number | null;
+    bound?: 'month' | 'day' | 'pool';
+    message?: string | null;
+    /** UTC day (YYYY-MM-DD) more becomes available. */
+    resetsOn?: string;
+    /** Keep it: take() while delivering, close() at the end. */
+    guard: BotGuard | null;
 }
 
 export declare class BotGuard {
     static open(scope: string, backend: Backend, opts?: OpenOptions): Promise<BotGuard | null>;
+    /** open() as one yes/no answer. */
+    static admit(scope: string, backend: Backend, opts?: OpenOptions): Promise<Decision>;
+    readonly decision: Decision;
+    readonly resetsOn: string;
+    /** Delete ledgers older than last month. Never throws. */
+    prune(): Promise<number>;
     readonly cfg: Config;
     readonly allowance: Allowance;
     readonly delivered: number;

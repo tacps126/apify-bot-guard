@@ -3,7 +3,7 @@ farms of free accounts from draining your data and your budget."""
 
 from .backends import ApifyKvBackend, Backend, MemoryBackend, RedisBackend
 from .core import Allowance, Config, Entry, Ledger, allowance_of, is_free_plan, user_hash
-from .guard import BotGuard, push_data
+from .guard import BotGuard, Decision, push_data
 
 __all__ = [
     "Allowance",
@@ -11,6 +11,7 @@ __all__ = [
     "Backend",
     "BotGuard",
     "Config",
+    "Decision",
     "Entry",
     "Ledger",
     "MemoryBackend",

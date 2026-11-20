@@ -15,4 +15,7 @@ First release, Python and JavaScript.
 - Holds at run start so parallel runs cannot each take the whole allowance.
 - Backends: Apify key-value store, Redis / Valkey / Upstash (pipelined), in-memory.
 - Generic identity: works outside Apify with your own user id, plan and run id.
+- `admit()`: one decision (allowed, remaining, message, resets on) to act on.
+- Old ledgers cleaned up: Redis by expiry, key-value stores by `prune()` on 2% of runs.
 - `push_data` / `pushData` helpers for the Apify SDK.
+- Examples: Python and JavaScript Actors, a free tier on an HTTP API, a generic job runner, cleanup.

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import {
     Ledger, accountShare, allowanceOf, configFromEnv, entry, isFreePlan, makeConfig, userHash,
 } from '../src/index.js';
-import { dayOfMonth, nextReset } from '../src/core.js';
+import { dayOfMonth, ledgerMonth, nextDay, nextReset, previousMonth } from '../src/core.js';
 
 // Pinned in both packages: Python and JavaScript Actors can share one store.
 // python3 -c "from apify_bot_guard import user_hash; print(user_hash('u1'))"
@@ -20,15 +20,15 @@ test('plan detection', () => {
 });
 
 test('config from env: off switch, values, overrides, clamps', () => {
-    for (const v of ['off', '0', 'false', ' OFF ']) assert.equal(configFromEnv('a', { FREE_BUDGET: v }), null);
+    for (const v of ['off', '0', 'false', ' OFF ']) assert.equal(configFromEnv('a', { BOT_GUARD: v }), null);
     const cfg = configFromEnv('a', {
-        FREE_ACTOR_MONTHLY_RESULTS: '50',
-        FREE_DAILY_SHARE: '5',
-        FREE_USER_MONTHLY_RESULTS: '-1',
-        FREE_POOL_MONTHLY_RESULTS: 'lots',
-        FREE_NEW_ACCOUNT_SHARE: 'Infinity',
-        FREE_COST_PER_RESULT: '0',
-        FREE_BUDGET_SCOPE: 'shared',
+        BOT_GUARD_ACTOR_MONTHLY_RESULTS: '50',
+        BOT_GUARD_DAILY_SHARE: '5',
+        BOT_GUARD_USER_MONTHLY_RESULTS: '-1',
+        BOT_GUARD_POOL_MONTHLY_RESULTS: 'lots',
+        BOT_GUARD_NEW_ACCOUNT_SHARE: 'Infinity',
+        BOT_GUARD_COST_PER_RESULT: '0',
+        BOT_GUARD_SCOPE: 'shared',
     }, { poolResults: 10, userUsd: null });
     assert.equal(cfg.actorResults, 50);
     assert.equal(cfg.dailyShare, 1);
@@ -88,4 +88,14 @@ test('date helpers and account share', () => {
 test('user hash matches the Python package', () => {
     assert.equal(userHash('u1'), HASH_U1);
     assert.notEqual(userHash('u1', 's'), HASH_U1);
+});
+
+test('month helpers', () => {
+    assert.equal(previousMonth('2026-01'), '2025-12');
+    assert.equal(previousMonth('2026-11'), '2026-10');
+    assert.equal(nextDay('2026-12-31'), '2027-01-01');
+    assert.equal(ledgerMonth('user.2026-11.abc'), '2026-11');
+    assert.equal(ledgerMonth('pool.2026-11.my.actor'), '2026-11');
+    assert.equal(ledgerMonth('seen.abc'), null);
+    assert.equal(ledgerMonth('user.later.abc'), null);
 });

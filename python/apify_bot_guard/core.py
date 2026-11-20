@@ -6,6 +6,7 @@ import calendar
 import hashlib
 import math
 import os
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -23,15 +24,15 @@ DEFAULTS: dict[str, float] = {
 }
 
 ENV_NAMES: dict[str, str] = {
-    "actor_results": "FREE_ACTOR_MONTHLY_RESULTS",
-    "actor_usd": "FREE_ACTOR_MONTHLY_USD",
-    "user_results": "FREE_USER_MONTHLY_RESULTS",
-    "user_usd": "FREE_USER_MONTHLY_USD",
-    "daily_share": "FREE_DAILY_SHARE",
-    "pool_results": "FREE_POOL_MONTHLY_RESULTS",
-    "new_account_days": "FREE_NEW_ACCOUNT_DAYS",
-    "new_account_share": "FREE_NEW_ACCOUNT_SHARE",
-    "cost_per_result": "FREE_COST_PER_RESULT",
+    "actor_results": "BOT_GUARD_ACTOR_MONTHLY_RESULTS",
+    "actor_usd": "BOT_GUARD_ACTOR_MONTHLY_USD",
+    "user_results": "BOT_GUARD_USER_MONTHLY_RESULTS",
+    "user_usd": "BOT_GUARD_USER_MONTHLY_USD",
+    "daily_share": "BOT_GUARD_DAILY_SHARE",
+    "pool_results": "BOT_GUARD_POOL_MONTHLY_RESULTS",
+    "new_account_days": "BOT_GUARD_NEW_ACCOUNT_DAYS",
+    "new_account_share": "BOT_GUARD_NEW_ACCOUNT_SHARE",
+    "cost_per_result": "BOT_GUARD_COST_PER_RESULT",
 }
 
 Env = Mapping[str, str]
@@ -60,9 +61,9 @@ class Config:
     @classmethod
     def from_env(cls, scope: str, env: Env | None = None, **overrides: float) -> Config | None:
         """Limits from env vars (see ENV_NAMES), then keyword overrides.
-        None when FREE_BUDGET is off, 0 or false."""
+        None when BOT_GUARD is off, 0 or false."""
         env = os.environ if env is None else env
-        if str(env.get("FREE_BUDGET", "")).strip().lower() in ("off", "0", "false"):
+        if str(env.get("BOT_GUARD", "")).strip().lower() in ("off", "0", "false"):
             return None
         values: dict[str, float] = {}
         for k, name in ENV_NAMES.items():
@@ -73,7 +74,7 @@ class Config:
             if math.isfinite(v) and v >= 0:
                 values[k] = v
         values.update({k: float(v) for k, v in overrides.items() if v is not None})
-        return cls(scope=str(env.get("FREE_BUDGET_SCOPE") or scope), **values)
+        return cls(scope=str(env.get("BOT_GUARD_SCOPE") or scope), **values)
 
 
 def is_free_plan(env: Env | None = None) -> bool | None:
@@ -229,3 +230,22 @@ def next_reset(month: str) -> str:
     y, m = (int(x) for x in month.split("-")[:2])
     y, m = (y + 1, 1) if m >= 12 else (y, m + 1)
     return f"{y:04d}-{m:02d}-01"
+
+
+def next_day(today: str) -> str:
+    return date.fromordinal(date.fromisoformat(today).toordinal() + 1).isoformat()
+
+
+def previous_month(month: str) -> str:
+    y, m = (int(x) for x in month.split("-")[:2])
+    y, m = (y - 1, 12) if m <= 1 else (y, m - 1)
+    return f"{y:04d}-{m:02d}"
+
+
+_LEDGER_KEY = re.compile(r"^(?:user|pool)\.(\d{4}-\d{2})\.")
+
+
+def ledger_month(key: str) -> str | None:
+    """`2026-11` for a ledger key like `user.2026-11.<hash>`; None for other keys."""
+    m = _LEDGER_KEY.match(key)
+    return m.group(1) if m else None

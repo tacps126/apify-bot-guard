@@ -9,7 +9,7 @@ import { FakeApifyClient, fakeRedis } from './fakes.js';
 const FREE = { APIFY_USER_ID: 'u1', APIFY_USER_IS_PAYING: '', ACTOR_RUN_ID: 'r1' };
 const LATER = '2099-01-01'; // first-seen days before this predate tracking: users are not "new"
 const quiet = { info() {}, warn() {} };
-const open = (b, env = FREE, o = {}) => BotGuard.open('a', b, { env, log: quiet, trackFrom: LATER, ...o });
+const open = (b, env = FREE, o = {}) => BotGuard.open('a', b, { env, log: quiet, trackFrom: LATER, autoPrune: 0, ...o });
 
 async function one(b, runId, wanted, today, o = {}) {
     const g = await open(b, { ...FREE, ACTOR_RUN_ID: runId }, { today, ...o });
@@ -66,7 +66,7 @@ test('no guard for paying, unknown, off or anonymous users', async () => {
     const b = new MemoryBackend();
     assert.equal(await open(b, { ...FREE, APIFY_USER_IS_PAYING: '1' }), null);
     assert.equal(await open(b, { APIFY_USER_ID: 'u1' }), null);
-    assert.equal(await open(b, { ...FREE, FREE_BUDGET: 'off' }), null);
+    assert.equal(await open(b, { ...FREE, BOT_GUARD: 'off' }), null);
     assert.equal(await open(b, { ...FREE, APIFY_USER_ID: '' }), null);
     assert.equal(b.data.size, 0);
 });
@@ -146,4 +146,59 @@ test('pushData cuts and sets the status message', async () => {
     assert.equal(await pushData(null, { i: 1 }, Actor), 1);
     assert.equal(pushed.length, 35);
     assert.equal(status.length, 2);
+});
+
+test('admit gives one answer', async () => {
+    const b = new MemoryBackend();
+    const paying = await BotGuard.admit('a', b, { env: { ...FREE, APIFY_USER_IS_PAYING: '1' }, log: quiet });
+    assert.deepEqual([paying.allowed, paying.unlimited, paying.guard], [true, true, null]);
+    const opts = { log: quiet, trackFrom: LATER, today: '2026-11-20', autoPrune: 0 };
+    const d = await BotGuard.admit('a', b, { ...opts, env: FREE });
+    assert.deepEqual([d.allowed, d.unlimited, d.remaining, d.bound, d.resetsOn], [true, false, 34, 'day', '2026-11-21']);
+    d.guard.take(34);
+    await d.guard.close();
+    assert.equal(d.guard.decision.allowed, false);
+    assert.match(d.guard.decision.message, /Free plan limit reached/);
+    const blocked = await BotGuard.admit('a', b, { ...opts, env: { ...FREE, ACTOR_RUN_ID: 'r2' } });
+    assert.deepEqual([blocked.allowed, blocked.remaining], [false, 0]);
+    const month = await open(new MemoryBackend(), FREE, { config: makeConfig('a', { dailyShare: 1, actorResults: 10 }), today: '2026-12-30' });
+    assert.deepEqual([month.decision.bound, month.resetsOn], ['month', '2027-01-01']);
+});
+
+async function seed(b) {
+    for (const month of ['2026-08', '2026-09', '2026-10', '2026-11']) {
+        const g = await open(b, FREE, { today: `${month}-15` });
+        await g.close();
+    }
+}
+
+test('prune keeps this and last month', async () => {
+    for (const b of [new MemoryBackend(), new ApifyKvBackend({ client: new FakeApifyClient() })]) {
+        await seed(b);
+        const g = await open(b, FREE, { today: '2026-11-20' });
+        assert.equal(await g.prune(), 4);
+        assert.equal(await g.prune(), 0);
+    }
+});
+
+test('apify prune pages through keys', async () => {
+    const c = new FakeApifyClient();
+    for (let i = 0; i < 2500; i++) c.records.set(`user.2026-01.${String(i).padStart(5, '0')}`, {});
+    c.records.set('seen.x', { first: '2026-01-01' });
+    assert.equal(await new ApifyKvBackend({ client: c }).prune('2026-10'), 2500);
+    assert.deepEqual([...c.records.keys()], ['seen.x']);
+});
+
+test('redis relies on TTL; auto prune runs on close; failures logged', async () => {
+    assert.equal(await new RedisBackend(fakeRedis('ioredis')).prune('2026-10'), 0);
+    const b = new MemoryBackend();
+    await seed(b);
+    const g = await open(b, FREE, { today: '2026-11-20', autoPrune: 1 });
+    await g.close();
+    assert.ok(![...b.data.keys()].some((k) => k.includes('2026-08')));
+    const broken = Object.assign(new MemoryBackend(), { prune: async () => { throw new Error('no list permission'); } });
+    const warned = [];
+    const g2 = await BotGuard.open('a', broken, { env: FREE, log: { warn: (m) => warned.push(m) }, today: '2026-11-20', trackFrom: LATER });
+    assert.equal(await g2.prune(), 0);
+    assert.equal(warned.length, 1);
 });

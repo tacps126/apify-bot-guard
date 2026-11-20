@@ -22,6 +22,17 @@ export class FakeApifyClient {
                 this.calls += 1;
                 this.records.set(key, structuredClone(value));
             },
+            listKeys: async ({ limit = 1000, exclusiveStartKey } = {}) => {
+                this.calls += 1;
+                const keys = [...this.records.keys()].sort().filter((k) => exclusiveStartKey === undefined || k > exclusiveStartKey);
+                const page = keys.slice(0, limit);
+                const more = keys.length > limit;
+                return { items: page.map((key) => ({ key })), isTruncated: more, nextExclusiveStartKey: more ? page.at(-1) : undefined };
+            },
+            deleteRecord: async (key) => {
+                this.calls += 1;
+                this.records.delete(key);
+            },
         };
     }
 }

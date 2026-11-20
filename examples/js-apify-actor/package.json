@@ -1,0 +1,11 @@
+{
+  "name": "bot-guard-example-actor",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "dependencies": {
+    "apify": "^3.2.0",
+    "apify-bot-guard": "^0.1.0",
+    "apify-client": "^2.9.0"
+  }
+}

@@ -13,13 +13,16 @@ ceiling on what all free users of an Actor can take together. Paying users are n
 It is not tied to Apify: pass the user id, plan and run id yourself and it guards any free tier.
 
 - [How it works](#how-it-works)
+- [One answer: allowed or not](#one-answer-allowed-or-not)
 - [Install](#install)
 - [Python](#python)
 - [JavaScript](#javascript)
 - [Storage backends](#storage-backends)
 - [Limits](#limits)
 - [Cost](#cost)
+- [Examples](examples)
 - [Design and storage format](docs/DESIGN.md)
+- [Maintaining and releasing](docs/MAINTAINING.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## How it works
@@ -40,6 +43,31 @@ books what it really delivered, which replaces the hold.
 A run that finds nothing left still succeeds, with a status message saying when more is available.
 When storage cannot be read, the run gets no monthly limit and a warning: a storage problem never
 blocks a customer.
+
+## One answer: allowed or not
+
+`admit()` gives you a decision to act on:
+
+```python
+decision = await BotGuard.admit("my-actor", backend)          # or user_id=..., free=... off Apify
+if not decision.allowed:
+    await Actor.set_status_message(decision.message)          # "Free plan limit reached ... more on 2026-12-01"
+    return                                                    # succeed, never fail
+guard = decision.guard                                        # None when unlimited (paying users)
+```
+
+| Field | Meaning |
+|---|---|
+| `allowed` | `true`: deliver. `false`: nothing left this period; end with `message` |
+| `unlimited` | No limit applies (paying user, guard off, or storage unreadable) |
+| `remaining` | Results this run may deliver (`None` / `null` when unlimited) |
+| `bound` | The limit that applies: `month`, `day` or `pool` |
+| `message`, `resets_on` / `resetsOn` | What to tell the user, and the UTC day more becomes available |
+| `guard` | Keep it while delivering: `take(n)` before each batch, `close()` at the end |
+
+Everything else happens inside: plan detection, holds against parallel runs, booking, the monthly
+reset, and cleanup of old records. Full runnable examples, including a free tier on your own HTTP API,
+are in [examples/](examples).
 
 ## Install
 
@@ -128,7 +156,12 @@ The run's own token belongs to the user and cannot write to your stores, so the 
 your token. Store keys hold a salted hash of the user id, never the id itself, and Python and
 JavaScript produce the same hash, so Actors in both languages can share one store.
 
-Need another store (Postgres, DynamoDB, Cloudflare KV)? A backend is three methods; see
+Old records clean themselves up. Redis ledgers expire after about 45 days. Key-value stores do not
+expire records, so about 1 in 50 runs (`auto_prune` / `autoPrune`, default 0.02) deletes ledgers older
+than last month on close. Set it to 0 and run [examples/cleanup](examples/cleanup) on a schedule if you
+prefer.
+
+Need another store (Postgres, DynamoDB, Cloudflare KV)? A backend is four methods; see
 [docs/DESIGN.md](docs/DESIGN.md#writing-a-backend) and send a pull request.
 
 ## Limits
@@ -137,16 +170,16 @@ Set with env vars on the Actor, or pass a config in code.
 
 | Limit | Env var | Default |
 |---|---|---|
-| Results per user per Actor per month | `FREE_ACTOR_MONTHLY_RESULTS` | 100 |
-| Your cost per user per Actor per month (USD) | `FREE_ACTOR_MONTHLY_USD` | 0.05 |
-| Results per user across all your Actors per month | `FREE_USER_MONTHLY_RESULTS` | 300 |
-| Your cost per user across all your Actors per month (USD) | `FREE_USER_MONTHLY_USD` | 0.25 |
-| Share of the monthly allowance usable in one day | `FREE_DAILY_SHARE` | 0.34 |
-| All free users of one Actor together, per month | `FREE_POOL_MONTHLY_RESULTS` | 3000 |
-| New accounts: age in days, and their share of the limits | `FREE_NEW_ACCOUNT_DAYS`, `FREE_NEW_ACCOUNT_SHARE` | 7, 0.25 |
-| What one result costs you (USD) | `FREE_COST_PER_RESULT` | 0.0005 |
-| Book under another name (variants sharing one allowance) | `FREE_BUDGET_SCOPE` | the scope you pass |
-| Turn it off | `FREE_BUDGET=off` | |
+| Results per user per Actor per month | `BOT_GUARD_ACTOR_MONTHLY_RESULTS` | 100 |
+| Your cost per user per Actor per month (USD) | `BOT_GUARD_ACTOR_MONTHLY_USD` | 0.05 |
+| Results per user across all your Actors per month | `BOT_GUARD_USER_MONTHLY_RESULTS` | 300 |
+| Your cost per user across all your Actors per month (USD) | `BOT_GUARD_USER_MONTHLY_USD` | 0.25 |
+| Share of the monthly allowance usable in one day | `BOT_GUARD_DAILY_SHARE` | 0.34 |
+| All free users of one Actor together, per month | `BOT_GUARD_POOL_MONTHLY_RESULTS` | 3000 |
+| New accounts: age in days, and their share of the limits | `BOT_GUARD_NEW_ACCOUNT_DAYS`, `BOT_GUARD_NEW_ACCOUNT_SHARE` | 7, 0.25 |
+| What one result costs you (USD) | `BOT_GUARD_COST_PER_RESULT` | 0.0005 |
+| Book under another name (variants sharing one allowance) | `BOT_GUARD_SCOPE` | the scope you pass |
+| Turn it off | `BOT_GUARD=off` | |
 
 Plan detection on Apify: `APIFY_USER_PRICING_TIER` when set, else `APIFY_USER_IS_PAYING`. That variable
 is `1` for paying users and set but empty for free ones, so an empty value means free.

@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import random
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 
 from .backends import Backend
@@ -18,12 +20,32 @@ from .core import (
     account_share,
     allowance_of,
     is_free_plan,
+    next_day,
     next_reset,
+    previous_month,
     user_hash,
     utc_today,
 )
 
 log = logging.getLogger("apify_bot_guard")
+
+
+@dataclass(frozen=True)
+class Decision:
+    """Whether a run may go ahead, and on what terms.
+
+    `allowed`: deliver results (False: nothing left; end the run with `message`).
+    `unlimited`: no limit applies (paying user, guard off, storage unreadable).
+    `remaining`: results this run may deliver (None when unlimited).
+    """
+
+    allowed: bool
+    unlimited: bool
+    remaining: int | None = None
+    bound: str | None = None
+    message: str | None = None
+    resets_on: str | None = None
+    guard: BotGuard | None = None
 
 
 class BotGuard:
@@ -52,6 +74,32 @@ class BotGuard:
         self._backend = backend
         self._log = logger
         self._booked = False
+        self.auto_prune = 0.0
+
+    @classmethod
+    async def admit(cls, scope: str, backend: Backend, **kwargs: Any) -> Decision:
+        """`open()` as one yes/no answer. Keep `decision.guard` (when set): call
+        `take()` while delivering and `close()` at the end."""
+        guard = await cls.open(scope, backend, **kwargs)
+        return guard.decision if guard else Decision(allowed=True, unlimited=True)
+
+    @property
+    def decision(self) -> Decision:
+        left = self.remaining
+        return Decision(
+            allowed=left > 0,
+            unlimited=False,
+            remaining=left,
+            bound=self.allowance.bound,
+            message=None if left > 0 else self.message,
+            resets_on=self.resets_on,
+            guard=self,
+        )
+
+    @property
+    def resets_on(self) -> str:
+        """The UTC day more becomes available."""
+        return next_reset(self.today[:7]) if self.allowance.bound == "month" else next_day(self.today)
 
     @classmethod
     async def open(
@@ -69,12 +117,13 @@ class BotGuard:
         force: bool = False,
         salt: str = "",
         track_from: str | None = None,
+        auto_prune: float = 0.02,
         logger: logging.Logger = log,
     ) -> BotGuard | None:
         """Load this run's allowance.
 
         Returns None (no limit) for paying users, unknown plans, a missing user
-        id, FREE_BUDGET=off, and when the backend cannot be read: a storage
+        id, BOT_GUARD=off, and when the backend cannot be read: a storage
         problem never blocks a customer.
 
         On Apify, `user_id`, `free` and `run_id` come from the run's env vars.
@@ -120,6 +169,7 @@ class BotGuard:
         guard = cls(
             cfg, backend, allowance, user_key=user_key, pool_key=pool_key, run_id=str(run), today=today, logger=logger
         )
+        guard.auto_prune = auto_prune
         logger.info(
             "bot-guard: %s results left (bound: %s, new account: %s)",
             allowance.results_left,
@@ -175,6 +225,19 @@ class BotGuard:
             await self._save(self.delivered, cost, hold=False)
         except Exception as e:  # noqa: BLE001
             self._log.warning("bot-guard: run not booked: %s", e)
+        if self.auto_prune > 0 and random.random() < self.auto_prune:
+            await self.prune()
+
+    async def prune(self) -> int:
+        """Delete ledgers older than last month. Never raises."""
+        try:
+            n = await self._backend.prune(previous_month(self.today[:7]))
+        except Exception as e:  # noqa: BLE001
+            self._log.warning("bot-guard: prune failed: %s", e)
+            return 0
+        if n:
+            self._log.info("bot-guard: pruned %s old ledgers", n)
+        return n
 
     async def _save(self, n: int, usd: float, *, hold: bool, known: dict[str, Any] | None = None) -> None:
         mine = Entry(a=self.cfg.scope, d=self.today, n=int(n), usd=usd, h=hold)

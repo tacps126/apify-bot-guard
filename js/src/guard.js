@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
-    accountShare, allowanceOf, configFromEnv, entry, isFreePlan, nextReset, userHash, utcToday,
+    accountShare, allowanceOf, configFromEnv, entry, isFreePlan, nextDay, nextReset, previousMonth, userHash, utcToday,
 } from './core.js';
 
 export class BotGuard {
@@ -18,11 +18,39 @@ export class BotGuard {
         this.backend = backend;
         this.log = log;
         this.booked = false;
+        this.autoPrune = 0;
+    }
+
+    /**
+     * open() as one yes/no answer. Keep `decision.guard` (when set): call
+     * take() while delivering and close() at the end.
+     */
+    static async admit(scope, backend, opts = {}) {
+        const guard = await BotGuard.open(scope, backend, opts);
+        return guard ? guard.decision : { allowed: true, unlimited: true, remaining: null, guard: null };
+    }
+
+    get decision() {
+        const left = this.remaining;
+        return {
+            allowed: left > 0,
+            unlimited: false,
+            remaining: left,
+            bound: this.allowance.bound,
+            message: left > 0 ? null : this.message,
+            resetsOn: this.resetsOn,
+            guard: this,
+        };
+    }
+
+    /** The UTC day more becomes available. */
+    get resetsOn() {
+        return this.allowance.bound === 'month' ? nextReset(this.today.slice(0, 7)) : nextDay(this.today);
     }
 
     /**
      * Load this run's allowance. Resolves to null (no limit) for paying users,
-     * unknown plans, a missing user id, FREE_BUDGET=off, and when the backend
+     * unknown plans, a missing user id, BOT_GUARD=off, and when the backend
      * cannot be read: a storage problem never blocks a customer.
      *
      * On Apify, userId, free and runId come from the run's env vars. Elsewhere,
@@ -59,6 +87,7 @@ export class BotGuard {
         const share = accountShare(cfg, opts.accountCreated ?? seen, today);
         const allowance = allowanceOf(cfg, u, p, today, share);
         const guard = new BotGuard({ cfg, backend, allowance, userKey, poolKey, runId, today, log });
+        guard.autoPrune = opts.autoPrune ?? 0.02;
         log.info?.(`bot-guard: ${allowance.resultsLeft} results left (bound: ${allowance.bound}, new account: ${share < 1})`);
         if (allowance.resultsLeft > 0) {
             try {
@@ -99,6 +128,19 @@ export class BotGuard {
             await this.#save(this.delivered, usd ?? this.delivered * this.cfg.costPerResult, false);
         } catch (e) {
             this.log.warn?.(`bot-guard: run not booked: ${e?.message ?? e}`);
+        }
+        if (this.autoPrune > 0 && Math.random() < this.autoPrune) await this.prune();
+    }
+
+    /** Delete ledgers older than last month. Never throws. */
+    async prune() {
+        try {
+            const n = await this.backend.prune(previousMonth(this.today.slice(0, 7)));
+            if (n) this.log.info?.(`bot-guard: pruned ${n} old ledgers`);
+            return n;
+        } catch (e) {
+            this.log.warn?.(`bot-guard: prune failed: ${e?.message ?? e}`);
+            return 0;
         }
     }
 
