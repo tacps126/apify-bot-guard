@@ -24,4 +24,4 @@ __all__ = [
     "push_data",
     "user_hash",
 ]
-__version__ = "0.1.0"
+__version__ = "0.1.1"
